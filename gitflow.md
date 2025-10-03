@@ -6,7 +6,7 @@
 
 ## Key Principles
 - Always **branch from `main`**. This is our default branch.  
-- Do **frequent commits and pushes** so your progress is tracked. Avoid large commits where possible.
+- **Avoid** large commits where possible and please include a summary if you need to do so.
 - **Sync your workspace branch with `main` frequently** to avoid any merge conflicts.  
 - All merges into `main` must go through **Pull Requests** and get **reviewer approval**.  
 
@@ -16,26 +16,25 @@
 
 ### 1. Clone repository & checkout main
 
-git clone <repo-url>
-git checkout main
+git clone "repo-url"<br>
+git checkout main<br>
 git pull origin main
 
 ### 2. Create your branch
 
-git checkout -b <branch-name>
+git checkout -b "branch-name"
 
 ### 3. Do your work (Commit and Push)
-git add .
-git commit -m "clear commit message"
+git add .<br>
+git commit -m "clear commit message"<br>
 git push
 
-### 4. Raise a PR
+### 4. Raise a Pull Request
 Open a PR into `main` and add a reviewer.
-Address review comments if any
-Once Approved, merge the PR
+Address review comments if any. Once Approved, merge the PR
 
 
-Example workflow :
+### Example workflow :
 
 1. Clone the repository and switch to the `main` branch.
 
