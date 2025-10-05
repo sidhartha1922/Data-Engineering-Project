@@ -51,3 +51,44 @@ Log in with:<br><br>
 Username: airflow<br>
 Password: airflow
 
+- Then visit pgAdmin [here](http://localhost:5050)
+
+Log in with:<br><br>
+Username: admin@admin.com<br>
+Password: root
+
+Inside pgAdmin:
+- Click “Add New Server”
+- General tab: Give it a name, e.g., Airflow Postgres
+- Connection tab:<br>
+Hostname: postgres → this is the Docker service name<br>
+Port: 5432<br>
+Username: airflow<br>
+Password: airflow<br>
+Maintenance Database: airflow
+
+Click Save → now pgAdmin can manage your PostgreSQL database.
+
+- Then, identify the IP address of the PostgreSQL Docker container:
+
+```bash
+docker container ls
+docker inspect <container_id> | findstr IPAddress
+```
+
+### 4. Add a connection in Airflow:
+
+- **Before writing to pipeline, Airflow need to be told how to postgres running in Docker**
+
+- Go to the Airflow UI and set up a new connection
+- Go to Admin → Connections.
+- Click “+” (Add a new record).
+- Fill out the form:<br>
+Connection Id (Name) → tutorial_pg_conn<br>
+Connection Type → postgres<br>
+Host → If using Docker Compose: postgres (service name in docker-compose.yaml)<br>
+Schema (Database) → airflow (or whatever database you created in pgAdmin/Postgres)<br>
+Login → airflow (your Postgres user from yaml)<br>
+Password → airflow<br>
+Port → 5432<br>
+Save ✅

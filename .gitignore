@@ -1,0 +1,6 @@
+# Airflow
+logs/*
+plugins/
+
+# Configuration files
+config*
