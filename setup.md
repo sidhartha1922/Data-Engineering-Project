@@ -53,42 +53,36 @@ Password: airflow
 
 - Then visit pgAdmin [here](http://localhost:5050)
 
+### 4. Create connections in pgAdmin manually 
+
 Log in with:<br><br>
 Username: admin@admin.com<br>
 Password: root
 
 Inside pgAdmin:
-- Click “Add New Server”
-- General tab: Give it a name, e.g., Airflow Postgres
-- Connection tab:<br>
-Hostname: postgres → this is the Docker service name<br>
-Port: 5432<br>
-Username: airflow<br>
-Password: airflow<br>
-Maintenance Database: airflow
 
-Click Save → now pgAdmin can manage your PostgreSQL database.
+1. Click "**Add New Server**"
 
-- Then, identify the IP address of the PostgreSQL Docker container:
+2. **Airflow Metadata DB:**  
+   - **General tab:**  
+     Name: Airflow Metadata DB  
+   - **Connection tab:**  
+     Hostname: postgres  
+     Port: 5432  
+     Username: airflow  
+     Password: airflow  
+     Maintenance Database: airflow  
+   - Click **Save** ✅  
+   _Note: This connects pgAdmin to the Airflow metadata database, used internally by Airflow to store DAG info, connections, and state._
 
-```bash
-docker container ls
-docker inspect <container_id> | findstr IPAddress
-```
-
-### 4. Add a connection in Airflow:
-
-- **Before writing to pipeline, Airflow need to be told how to postgres running in Docker**
-
-- Go to the Airflow UI and set up a new connection
-- Go to Admin → Connections.
-- Click “+” (Add a new record).
-- Fill out the form:<br>
-Connection Id (Name) → tutorial_pg_conn<br>
-Connection Type → postgres<br>
-Host → If using Docker Compose: postgres (service name in docker-compose.yaml)<br>
-Schema (Database) → airflow (or whatever database you created in pgAdmin/Postgres)<br>
-Login → airflow (your Postgres user from yaml)<br>
-Password → airflow<br>
-Port → 5432<br>
-Save ✅
+3. **Project Database (used by DAGs):**  
+   - **General tab:**  
+     Name: Project Database  
+   - **Connection tab:**  
+     Hostname: project-db  
+     Port: 5433  
+     Username: project_user  
+     Password: project_pass  
+     Maintenance Database: project_db  
+   - Click **Save** ✅  
+   _Note: This database is for your project data. Must be added manually because pgAdmin cannot automatically read Airflow connections. Airflow DAGs will use a connection ID pointing to this DB._
