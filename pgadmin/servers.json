@@ -1,0 +1,42 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "Airflow Metadata DB",
+            "Group": "PostgreSQL",
+            "Host": "postgres",
+            "Port": 5432,
+            "Username": "airflow",
+            "MaintenanceDB":"airflow",
+            "ConnectionParameters": {
+                "sslmode": "prefer",
+                "connect_timeout": 10,
+                "passfile": "/var/lib/pgadmin/storage/pgadmin_pgadmin.com/.pgpass"
+            },
+            "_comment1": "DESKTOP mode:- / in Passfile above starts after domain /var/lib/pgadmin/storage/<USERNAME>_<DOMAIN>/<pgpassfile>",
+            "_comment2": "https://github.com/pgadmin-org/pgadmin4/issues/6257",
+            "_comment3": "SERVER mode:- do [passfile: /.pgpass] (works on cloud that has linux OS)",
+            "PostConnectionSQL": "set timezone='Australia/Melbourne'"
+        },
+        "2": {
+            "Name": "Project Data DB",
+            "Group": "PostgreSQL",
+            "Host": "projecthost",
+            "Port": 5432,
+            "Username": "project",
+            "SharedUsername": "airflow",
+            "MaintenanceDB": "project",
+            "ConnectionParameters": {
+                "sslmode": "prefer",
+                "connect_timeout": 10,
+                "passfile": "/var/lib/pgadmin/storage/pgadmin_pgadmin.com/.pgpass"
+            },
+            "Tags": [
+                {
+                    "color": "#EC0BB4",
+                    "text": "Development"
+                }
+            ],
+            "PostConnectionSQL": "set timezone='Australia/Melbourne'"
+        }
+    }
+}

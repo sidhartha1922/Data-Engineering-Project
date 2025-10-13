@@ -30,7 +30,10 @@ Refer [here](https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-
 ### 2. Creating new directories
 
 ```bash
-mkdir dags logs plugins config
+mkdir airflow
+cd airflow
+mkdir dags logs plugins config pgadmin
+mkdir postgres
 ```
 
 ### 3. Initialize the Database and start the airflow

@@ -1,6 +1,7 @@
 # Airflow
-logs/*
-plugins/
+*/logs/*
+*/plugins/
+*.pyc
 
 # Configuration files
-config*
+# config*
