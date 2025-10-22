@@ -6,8 +6,10 @@ Data-Engineering-Project
 ├─ .env
 ├─ airflow
 │  ├─ config
+│  │  └─ airflow.cfg
 │  ├─ dags
-│  │  └─ demo_dag.py
+│  │  ├─ demo_dag.py
+│  │  └─ __pycache__
 │  ├─ Dockerfile
 │  ├─ entrypoint.sh
 │  └─ requirements.txt
@@ -16,12 +18,13 @@ Data-Engineering-Project
 ├─ gitflow.md
 ├─ Healthcare Data Engineering Project Plan – Initial Draft.docx
 ├─ Makefile
-├─ pgpass.conf
+├─ pgadmin
+│  ├─ pgpass
+│  └─ servers.json
 ├─ postgres
 │  ├─ init_metadata.sql
 │  └─ init_project.sql
 ├─ README.md
-├─ servers.json
 └─ setup.md
 
 ```

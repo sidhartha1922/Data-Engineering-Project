@@ -32,9 +32,16 @@ validate_env() {
 check_auth_manager() {
     local auth_manager="${AIRFLOW__CORE__AUTH_MANAGER:-}"
     [ -z "$auth_manager" ] && { log "Using default auth_manager"; return; }
+    
+    # SKIP FAB check for SimpleAuthManager
+    if [[ "$auth_manager" == *"simple"* ]]; then
+        log "Using SimpleAuthManager - skipping provider check"
+        return
+    fi
+    
     log "Checking auth_manager..."
     local module="${auth_manager%.*}"
-    python -c "import $module" 2>/dev/null || error "Cannot import '$module'. Install apache-airflow-providers-fab"
+    python -c "import $module" 2>/dev/null || error "Cannot import '$module'"
     log "✓ auth_manager available"
 }
 
@@ -143,12 +150,16 @@ init_airflow() {
     migrate_db
     
     if [ "${_AIRFLOW_WWW_USER_CREATE:-true}" = "true" ]; then
-        create_user
+
+        if [ "$AIRFLOW__CORE__AUTH_MANAGER" = "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager" ]; then
+            create_user
+        fi
         # CRITICAL FIX: Use hardcoded port 5432 for connections (Docker network routing)
         # DO NOT use ${POSTGRES_PORT} or ${PROJECT_PORT} here - those are host ports
         # Inside Docker network, both containers listen on default port 5432
-        add_connection "airflow_conn" "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
-        add_connection "project_conn" "postgresql+psycopg2://${PROJECT_USER}:${PROJECT_PASSWORD}@${PROJECT_HOST}:5432/${PROJECT_DB}"
+        add_connection "airflow_conn" "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+        add_connection "project_conn" "postgres://${PROJECT_USER}:${PROJECT_PASSWORD}@${PROJECT_HOST}:5432/${PROJECT_DB}"
+        # +psycopg2
     else
         log "Skipping user creation and connections"
     fi

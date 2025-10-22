@@ -34,22 +34,32 @@ x-airflow-common:
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    # CRITICAL: Enable FAB Auth Manager for user management in Airflow 3.x (see entrypoint to create airflow user)
-    # Without this, Airflow 3.x defaults to Simple Auth Manager which doesn't support 'airflow users create' command
-    # FAB provider must be installed in Dockerfile with [fab] extra
-    AIRFLOW__CORE__AUTH_MANAGER: "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
-    # SQL ALCHEMY is used to tell airflow how to connect to Metadata DB. Although, connection info has to be added separarely which is done through entrypoint
-    # CRITICAL FIX: Use hardcoded port 5432 here (not ${POSTGRES_PORT}) because this is for Docker network communication
-    # ${POSTGRES_PORT} from .env is for host access only
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
-    # REMOVED: AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth' - conflicts with FAB auth
-    # ADDED: Use FAB's auth backend instead (compatible with FAB Auth Manager)
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.providers.fab.auth_manager.api.auth.backend.basic_auth'
+
+    # AIRFLOW__CORE__AUTH_MANAGER: "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
+    AIRFLOW__SIMPLE_AUTH_MANAGER__USERS: 'admin:admin'
+    AIRFLOW__AUTH__MANAGER__DISABLE__AUTHENTICATION: 'True'
+
+    # AIRFLOW__API__BASE_URL: http://airflow-api-server:8080
+    # AIRFLOW__API__AUTH_BACKENDS: 'airflow.providers.fab.auth_manager.api.auth.backend.basic_auth,airflow.providers.fab.auth_manager.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-api-server:8080/execution/'
+    AIRFLOW__API__WORKER_TIMEOUT: '300'
+    AIRFLOW__WORKERS__EXECUTION_API_RETRIES: '10'
+    AIRFLOW__WORKERS__EXECUTION_API_RETRY_WAIT_MAX: '60.0'
+
+    AIRFLOW__API__SECRET_KEY: 'VWskD5T8FTPeT1OqGK5FGg=='
+    AIRFLOW__API_AUTH__JWT_SECRET: 'VWskD5T8FTPeT1OqGK5FGg=='
+    AIRFLOW__EXECUTION_API__JWT_AUDIENCE: 'urn:airflow.apache.org:task'
+
     _PIP_ADDITIONAL_REQUIREMENTS: ""
-    # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
   # Mount local directories into the container
@@ -201,7 +211,7 @@ services:
   airflow-api-server:
     <<: *airflow-common # Inherit common settings
     command: api-server # Command to run Airflow apiserver
-    # Map Airflow UI port 8080 to host's 8080
+    hostname: airflow-api-server
     ports:
       - "${AIRFLOW_PORT}:8080"
     # Check if the apiserver is responsive
@@ -222,6 +232,8 @@ services:
   airflow-dag-processor:
     <<: *airflow-common
     command: dag-processor
+    environment:
+      <<: *airflow-common-env
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
       interval: 30s
@@ -239,7 +251,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common # Inherit common settings
     command: scheduler # Command to run Airflow scheduler
-    # ADDED: Wait for init to complete (version 3.8 workaround)
+    hostname: airflow-scheduler
     depends_on:
       - airflow-init
     restart: unless-stopped
@@ -255,4 +267,3 @@ volumes:
 # Shared globally
 networks:
   project_net:
-    driver: bridge

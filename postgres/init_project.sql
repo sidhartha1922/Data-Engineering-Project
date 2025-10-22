@@ -1,25 +1,33 @@
--- init_project.sql
--- create user
+-- Create user
 CREATE USER project WITH PASSWORD 'project';
 
--- create database
+-- Create database
 CREATE DATABASE project OWNER project;
 
 GRANT ALL PRIVILEGES ON DATABASE project TO project;
 
--- connect to project DB
+-- Connect to project DB
 \connect project;
 
 CREATE SCHEMA IF NOT EXISTS project_schema;
--- PostgreSQL 15 requires additional privileges:
--- Note: Connect to the airflow_db database before running the following GRANT statement
--- You can do this in psql with: \c airflow_db
+
+-- Grant schema privileges
 GRANT ALL ON SCHEMA project_schema TO project;
 
--- create tables
-CREATE TABLE IF NOT EXISTS project_table1 (
+-- Create table
+CREATE TABLE IF NOT EXISTS project_schema.project_table1 (
     id SERIAL PRIMARY KEY,
     name TEXT,
     email TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- CRITICAL FIX: Grant all privileges on table
+GRANT ALL ON TABLE project_schema.project_table1 TO project;
+
+-- CRITICAL FIX: Grant all privileges on the sequence (auto-increment)
+-- This is required for INSERT operations to work
+GRANT ALL ON SEQUENCE project_schema.project_table1_id_seq TO project;
+
+-- Also grant on all sequences in the schema for future tables
+GRANT ALL ON ALL SEQUENCES IN SCHEMA project_schema TO project;

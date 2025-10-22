@@ -3,5 +3,4 @@
 */plugins/
 *.pyc
 
-# Configuration files
-# config*
+ref.py
