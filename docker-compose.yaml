@@ -1,0 +1,269 @@
+# absolute, gives warning => version: '3.8'
+
+# -----------------------------
+# Airflow Service Definitions 
+# -----------------------------
+
+# airflow-scheduler - The scheduler monitors all tasks and Dags, then triggers the task instances once their dependencies are complete.
+# airflow-dag-processor - The Dag processor parses Dag files.
+# airflow-api-server - The api server is available at http://localhost:8080.
+# airflow-worker - The worker that executes the tasks given by the scheduler.
+# airflow-triggerer - The triggerer runs an event loop for deferrable tasks.
+# airflow-init - The initialization service.
+# postgres - The database.
+# redis - The redis - broker that forwards messages from scheduler to worker.
+
+# For more info refer:- https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html
+# Refer when migrate to cloud:- https://medium.com/@thibautdonis1998/run-airflow-like-a-pro-locally-docker-compose-makefile-magic-3dd2eb220d9c
+
+
+# -----------------------------
+# Common Airflow config
+# -----------------------------
+# The (x-airflow-common:) is used to reuse (avoid repetition) the common settings in other services without explicitly adding the same settings in each of the services below separately
+x-airflow-common:
+  &airflow-common
+  # image: tag won't be used instead use build: to install base images and then additional packages separately as mentioned in *Dockerfile*
+  # image: apache/airflow:3.1.0-python3.9
+  build:
+    context: ./airflow # Add Dockerfile into the context. Where ./ means default context (root directory) followed by contents within airflow folder
+    dockerfile: Dockerfile
+  # env_file: is used so that we can add this tag (&airflow-common-env) for each of of services at once instead of providing variabes separately
+  env_file: .env
+  # environment: is used to override the environment variables set in .env OR set new ones in YAML. Although keeping them in .env is recommended to keep YAML clean.
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}"
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+
+    # AIRFLOW__CORE__AUTH_MANAGER: "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
+    AIRFLOW__SIMPLE_AUTH_MANAGER__USERS: 'admin:admin'
+    AIRFLOW__AUTH__MANAGER__DISABLE__AUTHENTICATION: 'True'
+
+    # AIRFLOW__API__BASE_URL: http://airflow-api-server:8080
+    # AIRFLOW__API__AUTH_BACKENDS: 'airflow.providers.fab.auth_manager.api.auth.backend.basic_auth,airflow.providers.fab.auth_manager.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-api-server:8080/execution/'
+    AIRFLOW__API__WORKER_TIMEOUT: '300'
+    AIRFLOW__WORKERS__EXECUTION_API_RETRIES: '10'
+    AIRFLOW__WORKERS__EXECUTION_API_RETRY_WAIT_MAX: '60.0'
+
+    AIRFLOW__API__SECRET_KEY: 'VWskD5T8FTPeT1OqGK5FGg=='
+    AIRFLOW__API_AUTH__JWT_SECRET: 'VWskD5T8FTPeT1OqGK5FGg=='
+    AIRFLOW__EXECUTION_API__JWT_AUDIENCE: 'urn:airflow.apache.org:task'
+
+    _PIP_ADDITIONAL_REQUIREMENTS: ""
+    AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+  volumes:
+  # Mount local directories into the container
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    # REMOVED: - ./airflow/requirements.txt:/requirements.txt (not needed, already copied in Dockerfile)
+  # Set Airflow GID. Often 0 (root group) works well inside container for mounted vols.
+  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
+  depends_on:
+   # Ensure postgres is healthy before airflow services start
+   # NOTE: condition: service_healthy is not supported for version 3.8, so we handle health checks in entrypoint.sh
+    - postgres
+  # For containers to communicate between each other
+  networks:
+    - project_net
+  restart: unless-stopped # recommended for Production to have on critical services. Alternatively for testing use, on-failure:3
+
+services:
+  # -----------------------------
+  # Postgres (Airflow metadata DB)
+  # -----------------------------
+  postgres:
+    image: postgres:15-alpine # Recommended as alpine has less size and is also more secure
+    env_file: .env
+    # Optional: Expose Postgres port to host for debugging/direct access
+    # Port mapping: host_port:container_port
+    # ${POSTGRES_PORT} (5432) on host -> 5432 inside container
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - ./postgres/init_metadata.sql:/docker-entrypoint-initdb.d/init_metadata.sql
+      - postgres-db-volume:/var/lib/postgresql/data # Mounting this volume in container
+      # Declaring it globally below under volumes: for volumes to persist
+    networks:
+      - project_net
+    healthcheck:
+    # Check if Postgres is ready to accept connections
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-airflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # -----------------------------
+  # Business Data Postgres DB
+  # -----------------------------
+  # projecthost service only spins up a Postgres container with a database (project) and user credentials (project)
+  projecthost:
+    image: postgres:15-alpine
+    env_file: .env
+    # CRITICAL: Port mapping for host access only
+    # ${PROJECT_PORT} (5433) on host -> 5432 inside container
+    # Inside Docker network, other containers access this as projecthost:5432 (NOT 5433)
+    ports:
+      - "${PROJECT_PORT}:5432" # Host port 5433 maps to container port 5432
+    volumes:
+     # Init.sql runs only once during first container creation
+      - ./postgres/init_project.sql:/docker-entrypoint-initdb.d/init_project.sql # Mount SQL scripts to auto-create schema/tables. Without Db creation enttrypoint can't add connections
+      - project-db-volume:/var/lib/postgresql/data 
+    networks:
+      - project_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PROJECT_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # -----------------------------
+  # pgAdmin (optional GUI)
+  # -----------------------------
+  # Refered from [https://medium.com/@yixin.feng20001120/building-a-data-pipeline-with-airflow-postgresql-and-docker-8639369f54f9]
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin4_container
+    # user root specified to get pgpass executed
+    user: root
+    environment:
+      # Add required email for storage path 
+      PGADMIN_DEFAULT_EMAIL: "${PGADMIN_EMAIL:-pgadmin@pgadmin.org}"  
+      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_PASSWORD:-admin}"  
+      # disabling login screen
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      # to avoid entering master password 'root' on login screen. This step is skipped
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+      # Disable postfix (unneeded for dev; avoids startup noise)
+      # PGADMIN_DISABLE_POSTFIX: 'True'
+      POSTGRES_USER: "${POSTGRES_USER:-airflow}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-airflow}"
+      PROJECT_USER: "${PROJECT_USER:-project}"
+      PROJECT_PASSWORD: "${PROJECT_PASSWORD:-project}"
+    ports:
+      - "5050:80"  
+    volumes:
+      - ./pgadmin/pgpass:/tmp/pgpass/.pgpass
+      - ./pgadmin/servers.json:/pgadmin4/servers.json
+    entrypoint: >
+        /bin/sh -c "
+        mkdir -p /var/lib/pgadmin/storage/pgadmin_pgadmin.com;
+        cp /tmp/pgpass/.pgpass /var/lib/pgadmin/storage/pgadmin_pgadmin.com/.pgpass;
+        chmod 0600 /var/lib/pgadmin/storage/pgadmin_pgadmin.com/.pgpass;
+        /entrypoint.sh
+        "
+    depends_on:
+      - postgres # airflow metadata
+      - projecthost # Business data
+    restart: on-failure
+    networks:
+      - project_net
+
+  # -----------------------------
+  # Airflow Init (DB migrations + admin user)
+  # -----------------------------
+  # This service runs once to initialize the database and create admin user
+  # REMOVED: Explicit command as entrypoint.sh handles everything and uses exec "$@"
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /entrypoint.sh
+    # CRITICAL: Don't pass any command - entrypoint will handle it
+    # The entrypoint.sh script will exit gracefully after initialization
+    command: []
+    # ADDED: Set environment variables to control init behavior
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'  # Triggers initialization in entrypoint.sh
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+    # NOTE: Cannot use condition: service_healthy in version 3.8
+    # Health checks are handled in entrypoint.sh using pg_isready
+    depends_on:
+      - postgres
+      - projecthost
+    restart: on-failure:3
+    networks:
+      - project_net
+    
+    # REMOVED OLD COMMAND (now handled by entrypoint.sh):
+    # command: >
+    #  bash -c "
+    #    airflow db migrate &&
+    #    airflow users create --username ${_AIRFLOW_WWW_USER_USERNAME:-admin} --password ${_AIRFLOW_WWW_USER_PASSWORD:-admin} --firstname Admin --lastname User --role Admin --email admin@example.com &&
+    #    airflow connections add 'postgres_conn' --conn-type postgres --conn-login ${PROJECT_DB_USER} --conn-password ${PROJECT_DB_PASSWORD} --conn-host ${PROJECT_DB_HOST} --conn-port ${PROJECT_DB_PORT} --conn-schema ${PROJECT_DB_NAME}"
+    # Above project DB connection info added to airflow metadata DB to ensure Business data works. Needed when we set conn_id='my_postgres' in DAG Py scripts
+    # Airflow will throw error if DB isn't created already while adding connections for Business related DB. DB created during postgres service for Project DB creation (check above)
+
+  # -----------------------------
+  # Airflow apiserver
+  # -----------------------------
+  airflow-api-server:
+    <<: *airflow-common # Inherit common settings
+    command: api-server # Command to run Airflow apiserver
+    hostname: airflow-api-server
+    ports:
+      - "${AIRFLOW_PORT}:8080"
+    # Check if the apiserver is responsive
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # ADDED: Wait for init to complete (version 3.8 workaround)
+    # Since we can't use condition: service_completed_successfully in version 3.8,
+    # apiserver will start after init, but may restart if it starts too early
+    # The restart: unless-stopped ensures it eventually comes up
+    depends_on:
+      - airflow-init
+    restart: unless-stopped
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    environment:
+      <<: *airflow-common-env
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # -----------------------------
+  # Airflow Scheduler  
+  # -----------------------------
+  airflow-scheduler:
+    <<: *airflow-common # Inherit common settings
+    command: scheduler # Command to run Airflow scheduler
+    hostname: airflow-scheduler
+    depends_on:
+      - airflow-init
+    restart: unless-stopped
+
+# These are resource configs so separate. The above X-common anchor could be reused only for services
+# Shared between different containers unlike bind mounts that are specific to directory/OS managed by Docker
+# Each volume is isolated per service (Airflow DB, Business DB, pgAdmin) to avoid data conflicts and allow modular backups
+# Also survives docker restarts and are persistant
+volumes:
+  postgres-db-volume:
+  project-db-volume:
+
+# Shared globally
+networks:
+  project_net:

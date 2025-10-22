@@ -1,0 +1,2 @@
+postgres:5432:*:airflow:airflow
+projecthost:5432:*:project:project

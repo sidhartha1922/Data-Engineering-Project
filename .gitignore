@@ -1,0 +1,6 @@
+# Airflow
+*/logs/*
+*/plugins/
+*.pyc
+
+ref.py
